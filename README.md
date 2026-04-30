@@ -1,11 +1,34 @@
 # Quasar
 
-## What is Quasar?
+![Stars](https://img.shields.io/github/stars/kayracizmeci/Quasar?style=flat-square&color=gold)
+![Forks](https://img.shields.io/github/forks/kayracizmeci/Quasar?style=flat-square&color=blue)
+![License](https://img.shields.io/github/license/kayracizmeci/Quasar?style=flat-square&color=green)
+
+## 🤔 What is Quasar?
+
 Quasar is a lightweight and simple OS. 
 
+## 📝 Requirements
+
+### 🔑 Core Requirements 
+* **nasm**
+* **make**
+* **gcc**
+    * *Note for macOS:* Use `x86_64-elf-gcc`.
+* **binutils**
+* **curl**
+* **tar & gzip**
+
+### 🧙 ISO Creation Tools
+* **xorriso**
+* **libisoburn**
+* **mtools**
+
+### 🤫 Optionals
+* **qemu-system-x86_64**
 
 
-## How to Create an ISO
+## 🧙 How to Create an ISO
 
 
 ### 1. Compiling 
@@ -60,7 +83,7 @@ xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
 ./limine-binary/limine bios-install image.iso
 ```
 
-## **EXTRA**
+## 🤫 **EXTRA**
 For booting the ISO with QEMU, use this command.
 ```bash
 qemu-system-x86_64 -cdrom image.iso -m 256M -serial stdio
