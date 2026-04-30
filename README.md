@@ -25,7 +25,8 @@ make TOOLCHAIN_PREFIX=x86_64-elf-
 ### 2. Installing latest release of Limine
 
 ```bash
-curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz | gunzip | tar -xf -
+curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz
+| gunzip | tar -xf -
 ```
 
 
@@ -59,7 +60,7 @@ xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
 ./limine-binary/limine bios-install image.iso
 ```
 
-## EXTRA
+## **EXTRA**
 For booting the ISO with QEMU, use this command.
 ```bash
 qemu-system-x86_64 -cdrom image.iso -m 256M -serial stdio
