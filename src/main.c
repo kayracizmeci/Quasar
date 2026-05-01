@@ -83,11 +83,10 @@ static void hcf(void) {
 
 /* Kernel entry point. */
 void kmain(void) {
-    gdt_load();
-
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         hcf();
     }
+    gdt_load();
 
     /* Check if we got a framebuffer. */
     if (framebuffer_request.response == NULL
