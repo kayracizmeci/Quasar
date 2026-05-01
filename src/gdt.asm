@@ -7,7 +7,7 @@ section .bss
 
 tss:
     resb 104
-    resb 8          ; explicit padding: 104+8=112 (7x16), stack_bottom stays 16-byte aligned
+    resb 8
 
 stack_bottom:
     resb 16384
