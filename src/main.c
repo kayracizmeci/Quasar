@@ -5,6 +5,7 @@
 
 #include <limine.h>
 
+extern void gdt_load(void);
 
 __attribute__((used, section(".limine_requests")))
 static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(6);
@@ -85,6 +86,7 @@ void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         hcf();
     }
+    gdt_load();
 
     /* Check if we got a framebuffer. */
     if (framebuffer_request.response == NULL
