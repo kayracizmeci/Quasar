@@ -48,8 +48,8 @@ make TOOLCHAIN_PREFIX=x86_64-elf-
 ### 2. Installing latest release of Limine
 
 ```bash
-curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz
-| gunzip | tar -xf -
+curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz \
+  | gunzip | tar -xf -
 ```
 
 
@@ -79,6 +79,26 @@ xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
         -efi-boot-part --efi-boot-image --protective-msdos-label \
         iso_root -o image.iso
 
+./limine-binary/limine bios-install image.iso
+```
+
+### 4. Rebuilding after code changes
+
+After modifying source files, you only need to recompile and recreate the ISO:
+
+```bash
+# Linux
+make
+# macOS
+make TOOLCHAIN_PREFIX=x86_64-elf-
+
+cp -v bin/quasaros iso_root/boot/
+
+xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
+        -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
+        -apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
+        -efi-boot-part --efi-boot-image --protective-msdos-label \
+        iso_root -o image.iso
 
 ./limine-binary/limine bios-install image.iso
 ```
