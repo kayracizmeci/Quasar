@@ -1,7 +1,8 @@
 bits 64
 
+section .note.GNU-stack noalloc noexec nowrite progbits
+
 global gdt_load
-global stack_top
 
 section .bss
 
@@ -39,8 +40,10 @@ gdtr:
 
 section .text
 
+; gdt_load uses lea [rel <symbol>] to reference .data/.bss from .text, which
+; produces 32-bit section-crossing relocations.  For a position-dependent
+; kernel whose image fits within 2 GB this is always safe; suppress the noise.
 [WARNING -reloc-rel-dword]
-
 gdt_load:
     cld
 
@@ -91,3 +94,4 @@ gdt_load:
     ltr ax
 
     ret
+[WARNING +reloc-rel-dword]
