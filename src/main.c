@@ -1,11 +1,12 @@
-
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
 #include <limine.h>
 
+#include "serial.h"
+
 extern void gdt_load(void);
+extern void idt_init(void);
 
 __attribute__((used, section(".limine_requests")))
 static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(6);
@@ -74,21 +75,23 @@ int memcmp(const void *s1, const void *s2, size_t n) {
     return 0;
 }
 
-static void hcf(void) {
+static void __attribute__((noreturn)) hcf(void) {
     for (;;) {
-        asm ("hlt");
+        asm volatile("hlt");
     }
 }
 
-
-/* Kernel entry point. */
 void kmain(void) {
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         hcf();
     }
-    gdt_load();
 
-    /* Check if we got a framebuffer. */
+    gdt_load();
+    serial_init();
+    idt_init();
+
+    serial_puts("[BOOT] kernel started\n");
+
     if (framebuffer_request.response == NULL
      || framebuffer_request.response->framebuffer_count < 1) {
         hcf();
@@ -97,13 +100,13 @@ void kmain(void) {
     struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
 
     volatile uint32_t *fb_ptr = framebuffer->address;
-        uint32_t yellow = 0xFFFF00;
+    uint32_t yellow = 0xFFFF00;
 
-        for (size_t y = 0; y < framebuffer->height; y++) {
-            for (size_t x = 0; x < framebuffer->width; x++) {
-                fb_ptr[y * (framebuffer->pitch / 4) + x] = yellow;
-            }
+    for (size_t y = 0; y < framebuffer->height; y++) {
+        for (size_t x = 0; x < framebuffer->width; x++) {
+            fb_ptr[y * (framebuffer->pitch / 4) + x] = yellow;
         }
-
-        hcf();
     }
+
+    hcf();
+}
