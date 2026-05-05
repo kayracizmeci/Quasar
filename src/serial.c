@@ -47,3 +47,11 @@ void serial_puthex64(uint64_t v) {
     for (int shift = 60; shift >= 0; shift -= 4)
         serial_putchar(digits[(v >> shift) & 0xF]);
 }
+
+void serial_putu64(uint64_t v) {
+    char buf[20];
+    int i = 0;
+    if (v == 0) { serial_putchar('0'); return; }
+    while (v > 0) { buf[i++] = (char)('0' + (v % 10)); v /= 10; }
+    while (i-- > 0) serial_putchar(buf[i]);
+}
