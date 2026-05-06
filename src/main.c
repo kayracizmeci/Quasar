@@ -4,6 +4,7 @@
 #include <limine.h>
 
 #include "serial.h"
+#include "pmm.h"
 
 extern void gdt_load(void);
 extern void idt_init(void);
@@ -88,16 +89,28 @@ void kmain(void) {
 
     gdt_load();
     serial_init();
-    idt_init();
+    serial_puts("[GDT] loaded\n");
+    serial_puts("[SERIAL] COM1 initialized\n");
 
+    idt_init();
+    serial_puts("[IDT] loaded\n");
+
+    pmm_init();
     serial_puts("[BOOT] kernel started\n");
 
     if (framebuffer_request.response == NULL
      || framebuffer_request.response->framebuffer_count < 1) {
+        serial_puts("[FB] no framebuffer found — halting\n");
         hcf();
     }
 
     struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
+
+    serial_puts("[FB] ");
+    serial_putu64(framebuffer->width);
+    serial_puts("x");
+    serial_putu64(framebuffer->height);
+    serial_puts(" framebuffer acquired\n");
 
     volatile uint32_t *fb_ptr = framebuffer->address;
     uint32_t yellow = 0xFFFF00;
@@ -108,5 +121,6 @@ void kmain(void) {
         }
     }
 
+    serial_puts("[BOOT] halting\n");
     hcf();
 }

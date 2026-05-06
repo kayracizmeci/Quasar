@@ -104,7 +104,30 @@ xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
 ```
 
 ## 🤫 **EXTRA**
-For booting the ISO with QEMU, use this command.
+
+### Booting with QEMU
+
 ```bash
 qemu-system-x86_64 -cdrom image.iso -m 256M -serial stdio
+```
+
+### Reading serial logs
+
+Serial output is printed to your terminal when using `-serial stdio`. You should see something like:
+
+```
+[GDT] loaded
+[SERIAL] COM1 initialized
+[IDT] loaded
+[PMM] initialized — 226 MB usable
+[BOOT] kernel started
+[FB] 1024x768 framebuffer acquired
+[BOOT] halting
+```
+
+To save logs to a file instead:
+
+```bash
+qemu-system-x86_64 -cdrom image.iso -m 256M -serial file:serial.log -display none
+cat serial.log
 ```
