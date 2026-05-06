@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include "exceptions.h"
-#include "serial.h"
+#include "drivers/serial.h"
 
 extern void idt_flush(uint64_t idtr_ptr);
 
