@@ -2,6 +2,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "drivers/serial.h"
+#include "kernel/panic.h"
 
 #include <stdint.h>
 
@@ -22,6 +23,8 @@ static struct block *heap_start;
 void kheap_init(void) {
     for (size_t i = 0; i < HEAP_PAGES; i++) {
         uint64_t phys = (uint64_t)pmm_alloc_page();
+        if (!phys)
+            kpanic("out of physical memory");
         vmm_map_kernel_page(HEAP_BASE + i * PAGE_SIZE, phys, VMM_PRESENT | VMM_WRITE);
     }
 
@@ -36,6 +39,7 @@ void kheap_init(void) {
 }
 
 void *kmalloc(size_t size) {
+    if (!size) return NULL;
     struct block *cur = heap_start;
     while (cur) {
         if (cur->free && cur->size >= size) {
@@ -58,9 +62,24 @@ void *kmalloc(size_t size) {
 void kfree(void *ptr) {
     if (!ptr) return;
     struct block *blk = (struct block *)ptr - 1;
+    if (blk->free)
+        kpanic("kfree double free");
     blk->free = 1;
+
+    /* Forward coalescing */
     while (blk->next && blk->next->free) {
         blk->size += HEADER_SIZE + blk->next->size;
         blk->next  = blk->next->next;
+    }
+
+    /* Backward coalescing: find the block immediately before blk */
+    if (blk != heap_start) {
+        struct block *prev = heap_start;
+        while (prev->next && prev->next != blk)
+            prev = prev->next;
+        if (prev->free) {
+            prev->size += HEADER_SIZE + blk->size;
+            prev->next  = blk->next;
+        }
     }
 }

@@ -1,5 +1,6 @@
 #include "pmm.h"
 #include "drivers/serial.h"
+#include "kernel/panic.h"
 
 #define PAGE_SIZE       4096ULL
 #define BITS_PER_BYTE   8
@@ -59,6 +60,9 @@ void pmm_init(void) {
         }
     }
 
+    if (!bitmap)
+        kpanic("no usable region large enough for bitmap");
+
     for (uint64_t i = 0; i < bitmap_size; i++)
         bitmap[i] = BITMAP_FULL;
 
@@ -97,7 +101,12 @@ void *pmm_alloc_page(void) {
 }
 
 void pmm_free_page(void *addr) {
-    bitmap_clear((uint64_t)addr / PAGE_SIZE);
+    uint64_t page = (uint64_t)addr / PAGE_SIZE;
+    if (page >= total_pages)
+        kpanic("pmm_free_page out of bounds");
+    if (!bitmap_test(page))
+        kpanic("pmm_free_page double free");
+    bitmap_clear(page);
 }
 
 uint64_t pmm_hhdm_offset(void) { return hhdm_offset; }

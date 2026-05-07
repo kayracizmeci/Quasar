@@ -15,6 +15,14 @@ stack_bottom:
 
 stack_top:
 
+df_stack_bottom:
+    resb 4096                       ; 4 KiB double-fault stack (IST1)
+df_stack_top:
+
+nmi_stack_bottom:
+    resb 4096                       ; 4 KiB NMI stack (IST2)
+nmi_stack_top:
+
 section .data
 align 16
 
@@ -89,6 +97,11 @@ gdt_load:
     lea rax, [rel stack_top]
     lea rdi, [rel tss]
     mov [rdi + 4], rax              ; TSS.RSP0 — ring-0 stack pointer used on privilege change
+
+    lea rax, [rel df_stack_top]
+    mov [rdi + 36], rax             ; TSS.IST1 — double fault stack
+    lea rax, [rel nmi_stack_top]
+    mov [rdi + 44], rax             ; TSS.IST2 — NMI stack
 
     mov ax, 0x30                    ; GDT index 6 — TSS selector (tss_desc at offset 0x30 after alignment)
     ltr ax

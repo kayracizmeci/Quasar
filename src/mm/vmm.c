@@ -1,6 +1,7 @@
 #include "vmm.h"
 #include "pmm.h"
 #include "drivers/serial.h"
+#include "kernel/panic.h"
 
 #include <limine.h>
 
@@ -26,6 +27,8 @@ static uint64_t *kernel_pml4;
 static uint64_t *next_level(uint64_t *table, uint64_t idx) {
     if (!(table[idx] & VMM_PRESENT)) {
         uint64_t phys = (uint64_t)pmm_alloc_page();
+        if (!phys)
+            kpanic("out of physical memory");
         uint64_t *virt = (uint64_t *)(pmm_hhdm_offset() + phys);
         for (int i = 0; i < ENTRIES; i++) virt[i] = 0;
         table[idx] = phys | VMM_PRESENT | VMM_WRITE;
@@ -38,11 +41,15 @@ void vmm_map_page(uint64_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags) 
     uint64_t *pd   = next_level(pdpt, PDPT_IDX(virt));
 
     if (flags & VMM_HUGE) {
+        if (pd[PD_IDX(virt)] & VMM_PRESENT)
+            kpanic("remapping already-mapped huge page");
         pd[PD_IDX(virt)] = ALIGN_DOWN(phys, HUGE_SIZE) | flags;
         return;
     }
 
     uint64_t *pt = next_level(pd, PD_IDX(virt));
+    if (pt[PT_IDX(virt)] & VMM_PRESENT)
+        kpanic("remapping already-mapped page");
     pt[PT_IDX(virt)] = ALIGN_DOWN(phys, PAGE_SIZE) | flags;
 }
 
@@ -53,6 +60,8 @@ void vmm_init(void) {
     uint64_t kern_virt = exec_addr_request.response->virtual_base;
 
     uint64_t pml4_phys = (uint64_t)pmm_alloc_page();
+    if (!pml4_phys)
+        kpanic("out of physical memory");
     kernel_pml4 = (uint64_t *)(hhdm + pml4_phys);
     for (int i = 0; i < ENTRIES; i++) kernel_pml4[i] = 0;
 
