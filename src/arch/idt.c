@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include "exceptions.h"
-#include "serial.h"
+#include "drivers/serial.h"
 
 extern void idt_flush(uint64_t idtr_ptr);
 
@@ -114,13 +114,13 @@ static void (* const isr_table[EXC_COUNT])(void) = {
     [EXC_RSVD_31]  = isr31,
 };
 
-static void idt_set_gate(int vector, uint64_t handler, uint8_t type) {
+static void idt_set_gate(int vector, uint64_t handler, uint8_t type, uint8_t ist) {
     idt[vector].offset_1 = (uint16_t)(handler & 0xFFFF);
     idt[vector].offset_2 = (uint16_t)((handler >> 16) & 0xFFFF);
     idt[vector].offset_3 = (uint32_t)((handler >> 32) & 0xFFFFFFFF);
     idt[vector].selector = GDT_KERNEL_CODE;
     idt[vector].type     = type;
-    idt[vector].ist      = 0;
+    idt[vector].ist      = ist;
     idt[vector].reserved = 0;
 }
 
@@ -134,8 +134,33 @@ void isr_handler(struct InterruptFrame *frame) {
     serial_puts("\n  vector="); serial_puthex64(frame->vector);
     serial_puts("  err=");     serial_puthex64(frame->error_code);
     serial_puts("\n  rip=");   serial_puthex64(frame->rip);
-    serial_puts("  rsp=");     serial_puthex64(frame->rsp);
-    serial_puts("  rflags=");  serial_puthex64(frame->rflags);
+    serial_puts("  cs=");      serial_puthex64(frame->cs);
+    serial_puts("\n  rsp=");   serial_puthex64(frame->rsp);
+    serial_puts("  ss=");      serial_puthex64(frame->ss);
+    serial_puts("\n  rflags="); serial_puthex64(frame->rflags);
+    serial_puts("\n  rax=");   serial_puthex64(frame->rax);
+    serial_puts("  rbx=");     serial_puthex64(frame->rbx);
+    serial_puts("  rcx=");     serial_puthex64(frame->rcx);
+    serial_puts("  rdx=");     serial_puthex64(frame->rdx);
+    serial_puts("\n  rsi=");   serial_puthex64(frame->rsi);
+    serial_puts("  rdi=");     serial_puthex64(frame->rdi);
+    serial_puts("  rbp=");     serial_puthex64(frame->rbp);
+    serial_puts("\n  r8=");    serial_puthex64(frame->r8);
+    serial_puts("   r9=");     serial_puthex64(frame->r9);
+    serial_puts("  r10=");     serial_puthex64(frame->r10);
+    serial_puts("  r11=");     serial_puthex64(frame->r11);
+    serial_puts("\n  r12=");   serial_puthex64(frame->r12);
+    serial_puts("  r13=");     serial_puthex64(frame->r13);
+    serial_puts("  r14=");     serial_puthex64(frame->r14);
+    serial_puts("  r15=");     serial_puthex64(frame->r15);
+
+    if (frame->vector == EXC_PF) {
+        uint64_t cr2;
+        asm volatile("mov %%cr2, %0" : "=r"(cr2));
+        serial_puts("\n  cr2="); serial_puthex64(cr2);
+        serial_puts("  (faulting address)");
+    }
+
     serial_puts("\n");
 
     /* #BP is a trap: RIP already points past the int3, so just return */
@@ -157,7 +182,14 @@ void idt_init(void) {
         /* #BP uses a trap gate so IF stays unchanged — all other exceptions
            use an interrupt gate which clears IF to prevent nested faults */
         uint8_t gate_type = (i == EXC_BP) ? IDT_GATE_TRAP : IDT_GATE_INTERRUPT;
-        idt_set_gate(i, (uint64_t)isr_table[i], gate_type);
+
+        /* Critical exceptions get a dedicated IST stack so they remain
+           handleable even if the main kernel stack is corrupted */
+        uint8_t ist = 0;
+        if (i == EXC_DF)  ist = 1;   /* #DF double fault  → IST1 */
+        if (i == EXC_NMI) ist = 2;   /* NMI               → IST2 */
+
+        idt_set_gate(i, (uint64_t)isr_table[i], gate_type, ist);
     }
 
     idt_flush((uint64_t)&idtr);

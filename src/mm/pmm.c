@@ -1,5 +1,6 @@
 #include "pmm.h"
-#include "serial.h"
+#include "drivers/serial.h"
+#include "kernel/panic.h"
 
 #define PAGE_SIZE       4096ULL
 #define BITS_PER_BYTE   8
@@ -18,6 +19,7 @@ static volatile struct limine_hhdm_request hhdm_request = {
 };
 
 static uint64_t hhdm_offset;
+static uint64_t max_phys;
 static uint8_t *bitmap;
 static uint64_t total_pages;
 
@@ -37,15 +39,17 @@ void pmm_init(void) {
     struct limine_memmap_response *memmap = memmap_request.response;
     hhdm_offset = hhdm_request.response->offset;
 
-    uint64_t max_addr = 0;
+    max_phys = 0;
     for (uint64_t i = 0; i < memmap->entry_count; i++) {
         struct limine_memmap_entry *e = memmap->entries[i];
+        if (e->type == LIMINE_MEMMAP_RESERVED_MAPPED)
+            continue;
         uint64_t end = e->base + e->length;
-        if (end > max_addr)
-            max_addr = end;
+        if (end > max_phys)
+            max_phys = end;
     }
 
-    total_pages = max_addr / PAGE_SIZE;
+    total_pages = max_phys / PAGE_SIZE;
     uint64_t bitmap_size = (total_pages + (BITS_PER_BYTE - 1)) / BITS_PER_BYTE;
 
     for (uint64_t i = 0; i < memmap->entry_count; i++) {
@@ -55,6 +59,9 @@ void pmm_init(void) {
             break;
         }
     }
+
+    if (!bitmap)
+        kpanic("no usable region large enough for bitmap");
 
     for (uint64_t i = 0; i < bitmap_size; i++)
         bitmap[i] = BITMAP_FULL;
@@ -94,5 +101,13 @@ void *pmm_alloc_page(void) {
 }
 
 void pmm_free_page(void *addr) {
-    bitmap_clear((uint64_t)addr / PAGE_SIZE);
+    uint64_t page = (uint64_t)addr / PAGE_SIZE;
+    if (page >= total_pages)
+        kpanic("pmm_free_page out of bounds");
+    if (!bitmap_test(page))
+        kpanic("pmm_free_page double free");
+    bitmap_clear(page);
 }
+
+uint64_t pmm_hhdm_offset(void) { return hhdm_offset; }
+uint64_t pmm_max_phys(void)    { return max_phys; }

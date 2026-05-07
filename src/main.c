@@ -3,8 +3,10 @@
 #include <stdbool.h>
 #include <limine.h>
 
-#include "serial.h"
-#include "pmm.h"
+#include "drivers/serial.h"
+#include "mm/pmm.h"
+#include "mm/vmm.h"
+#include "mm/kheap.h"
 
 extern void gdt_load(void);
 extern void idt_init(void);
@@ -96,6 +98,8 @@ void kmain(void) {
     serial_puts("[IDT] loaded\n");
 
     pmm_init();
+    vmm_init();
+    kheap_init();
     serial_puts("[BOOT] kernel started\n");
 
     if (framebuffer_request.response == NULL
