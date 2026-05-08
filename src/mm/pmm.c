@@ -1,6 +1,9 @@
+#include <stddef.h>
+#include <limine.h>
 #include "pmm.h"
 #include "drivers/serial.h"
 #include "kernel/panic.h"
+#include "kernel/spinlock.h"
 
 #define PAGE_SIZE       4096ULL
 #define BITS_PER_BYTE   8
@@ -18,10 +21,11 @@ static volatile struct limine_hhdm_request hhdm_request = {
     .revision = 0
 };
 
-static uint64_t hhdm_offset;
-static uint64_t max_phys;
-static uint8_t *bitmap;
-static uint64_t total_pages;
+static uint64_t   hhdm_offset;
+static uint64_t   max_phys;
+static uint8_t   *bitmap;
+static uint64_t   total_pages;
+static spinlock_t pmm_lock = SPINLOCK_INIT;
 
 static void bitmap_set(uint64_t page) {
     bitmap[page / BITS_PER_BYTE] |= (uint8_t)(1 << (page % BITS_PER_BYTE));
@@ -91,12 +95,15 @@ void pmm_init(void) {
 }
 
 void *pmm_alloc_page(void) {
+    spinlock_acquire(&pmm_lock);
     for (uint64_t i = 0; i < total_pages; i++) {
         if (!bitmap_test(i)) {
             bitmap_set(i);
+            spinlock_release(&pmm_lock);
             return (void *)(i * PAGE_SIZE);
         }
     }
+    spinlock_release(&pmm_lock);
     return NULL;
 }
 
@@ -104,9 +111,13 @@ void pmm_free_page(void *addr) {
     uint64_t page = (uint64_t)addr / PAGE_SIZE;
     if (page >= total_pages)
         kpanic("pmm_free_page out of bounds");
-    if (!bitmap_test(page))
+    spinlock_acquire(&pmm_lock);
+    if (!bitmap_test(page)) {
+        spinlock_release(&pmm_lock);
         kpanic("pmm_free_page double free");
+    }
     bitmap_clear(page);
+    spinlock_release(&pmm_lock);
 }
 
 uint64_t pmm_hhdm_offset(void) { return hhdm_offset; }

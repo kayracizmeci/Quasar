@@ -10,3 +10,4 @@
 void vmm_init(void);
 void vmm_map_page(uint64_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags);
 void vmm_map_kernel_page(uint64_t virt, uint64_t phys, uint64_t flags);
+uint64_t vmm_kernel_cr3(void);

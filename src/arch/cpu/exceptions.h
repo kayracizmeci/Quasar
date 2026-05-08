@@ -66,3 +66,20 @@
 
 /* GDT selector for the 64-bit ring-0 code segment (index 1, RPL 0) */
 #define GDT_KERNEL_CODE  0x08
+
+/*
+ * Hardware IRQ vector assignments.
+ *
+ * Vectors 0-31 are reserved by the CPU for exceptions (above).
+ * We start hardware IRQs at 32 so that any misfired IRQ cannot be confused
+ * with a CPU exception.  The I/O APIC maps GSI n to vector IRQ_VECTOR_BASE+n.
+ *
+ * Vector 255 is the APIC spurious vector.  The APIC fires it when an IRQ is
+ * raised but then withdrawn before the CPU acknowledges it; it must never
+ * receive an EOI.
+ */
+#define IRQ_VECTOR_BASE     32
+#define IRQ_VECTOR_SPURIOUS 255
+
+/* Number of hardware IRQ vectors (32-254 inclusive); spurious is separate */
+#define IRQ_VECTOR_COUNT    (IDT_NUM_ENTRIES - IRQ_VECTOR_BASE - 1)

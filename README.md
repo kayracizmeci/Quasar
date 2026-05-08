@@ -4,130 +4,152 @@
 ![Forks](https://img.shields.io/github/forks/kayracizmeci/Quasar?style=flat-square&color=blue)
 ![License](https://img.shields.io/github/license/kayracizmeci/Quasar?style=flat-square&color=green)
 
-## 🤔 What is Quasar?
+## What is Quasar?
 
-Quasar is a lightweight and simple OS. 
+Quasar is a lightweight x86-64 hobby operating system kernel.
 
-## 📝 Requirements
+## Requirements
 
-### 🔑 Core Requirements 
-* **nasm**
-* **make**
-* **gcc**
-    * *Note for macOS:* Use `x86_64-elf-gcc`.
-* **binutils**
-* **curl**
-* **tar & gzip**
+| Tool | Notes |
+|---|---|
+| `nasm` | Assembler |
+| `make` | Build system |
+| `gcc` | C compiler — on macOS use `x86_64-elf-gcc` from Homebrew |
+| `binutils` | Linker (`ld`) — on macOS use `x86_64-elf-binutils` |
+| `xorriso` | ISO creation |
+| `qemu-system-x86_64` | Optional — for running the kernel |
 
-### 🧙 ISO Creation Tools
-* **xorriso**
-* **libisoburn**
-* **mtools**
-
-### 🤫 Optionals
-* **qemu-system-x86_64**
-
-
-## 🧙 How to Create an ISO
-
-
-### 1. Compiling 
-
-Enter this command to your terminal.
+### macOS setup
 
 ```bash
-make 
+brew install x86_64-elf-gcc x86_64-elf-binutils nasm xorriso qemu
 ```
 
-**NOTE:** For MacOS, you need to install x86_64-elf-gcc package. After installing, enter this command to your terminal.
+## Building
+
+### First time only — download Limine bootloader
 
 ```bash
-make TOOLCHAIN_PREFIX=x86_64-elf-
+curl -L https://github.com/limine-bootloader/limine/releases/latest/download/limine-binary.tar.gz \
+  | tar -xz --strip-components=1 -C limine-binary/
 ```
 
-### 2. Installing latest release of Limine
-
-```bash
-curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz \
-  | gunzip | tar -xf -
-```
-
-
-### 3. Creating the ISO
-
-```bash
-make -C limine-binary
-
-# Create a directory ISO root.
-mkdir -p iso_root
-
-# Copy the files over.
-mkdir -p iso_root/boot
-cp -v bin/quasaros iso_root/boot/
-mkdir -p iso_root/boot/limine
-cp -v limine.conf limine-binary/limine-bios.sys limine-binary/limine-bios-cd.bin \
-      limine-binary/limine-uefi-cd.bin iso_root/boot/limine/
-
-mkdir -p iso_root/EFI/BOOT
-cp -v limine-binary/BOOTX64.EFI iso_root/EFI/BOOT/
-cp -v limine-binary/BOOTIA32.EFI iso_root/EFI/BOOT/
-
-# Create the ISO.
-xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
-        -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
-        -apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
-        -efi-boot-part --efi-boot-image --protective-msdos-label \
-        iso_root -o image.iso
-
-./limine-binary/limine bios-install image.iso
-```
-
-### 4. Rebuilding after code changes
-
-After modifying source files, you only need to recompile and recreate the ISO:
+### Compile the kernel
 
 ```bash
 # Linux
 make
+
 # macOS
 make TOOLCHAIN_PREFIX=x86_64-elf-
-
-cp -v bin/quasaros iso_root/boot/
-
-xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
-        -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
-        -apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
-        -efi-boot-part --efi-boot-image --protective-msdos-label \
-        iso_root -o image.iso
-
-./limine-binary/limine bios-install image.iso
 ```
 
-## 🤫 **EXTRA**
-
-### Booting with QEMU
+### Build a bootable ISO
 
 ```bash
-qemu-system-x86_64 -cdrom image.iso -m 256M -serial stdio
+# Linux
+make iso
+
+# macOS
+make iso TOOLCHAIN_PREFIX=x86_64-elf-
 ```
 
-### Reading serial logs
+### Rebuild after source changes
 
-Serial output is printed to your terminal when using `-serial stdio`. You should see something like:
+```bash
+make iso                            # Linux
+make iso TOOLCHAIN_PREFIX=x86_64-elf-   # macOS
+```
+
+## Running
+
+### QEMU (any platform)
+
+```bash
+make run                            # Linux
+make run TOOLCHAIN_PREFIX=x86_64-elf-   # macOS
+```
+
+### QEMU with KVM acceleration (Linux only)
+
+```bash
+make run-kvm
+```
+
+### Boot on real hardware
+
+Write `image.iso` to a USB drive or burn it to a disc.
+
+```bash
+# Linux — replace /dev/sdX with your drive
+sudo dd if=image.iso of=/dev/sdX bs=4M status=progress && sync
+```
+
+## Serial output
+
+All kernel log messages go to COM1 at 115200 baud.  When running in QEMU
+(`-serial stdio`) they appear directly in the terminal:
 
 ```
 [GDT] loaded
 [SERIAL] COM1 initialized
 [IDT] loaded
-[PMM] initialized — 226 MB usable
+[ACPI] LAPIC phys=0x00000000fee00000  ioapics=1  isos=2
+[LAPIC] id=0x0000000000000000  version=0x0000000000000014
+[LAPIC] initialized
+[IOAPIC] id=0x00  gsi_base=0  lines=24
+[IOAPIC] ISO: IRQ 0 -> GSI 2
+[IOAPIC] initialized
+[TIMER] 10 ms tick  LAPIC ticks/period=1193182
+[BOOT] interrupts enabled
 [BOOT] kernel started
-[FB] 1024x768 framebuffer acquired
-[BOOT] halting
 ```
 
-To save logs to a file instead:
+To save logs to a file:
 
 ```bash
-qemu-system-x86_64 -cdrom image.iso -m 256M -serial file:serial.log -display none
+qemu-system-x86_64 -machine q35 -cdrom image.iso -m 256M \
+    -serial file:serial.log -display none -no-reboot -no-shutdown
 cat serial.log
 ```
+## References
+
+### Intel SDM (Software Developer Manual)
+
+- Vol. 3A §4.5 — Paging
+- Vol. 3A §6.3.1, §6.10, §6.14.1 — IDT & Exceptions
+- Vol. 3A §7.2.3, §7.7 — TSS
+- Vol. 3A §10.4.1, §10.4.4, §10.5–10.8 — LAPIC
+- Vol. 2A — CPUID
+
+### ACPI Specification 6.5
+
+- §5.2.5 — RSDP
+- §5.2.6 — SDT header
+- §5.2.7 / §5.2.8 — RSDT / XSDT
+- §5.2.12 — MADT
+- §5.2.12.3, §5.2.12.5, §5.2.12.8 — MADT entries
+
+### Intel 82093AA I/O APIC Datasheet
+
+- §3.1, §3.2.2, §3.2.4 — MMIO map, version, redirection table
+
+### Intel 8259A Datasheet
+
+- §2.1 — ICW initialization sequence
+
+### Intel 8254 PIT Datasheet
+
+- §1.3 — Channel ports
+
+### 16550 UART Datasheet
+
+- §3, §4 — Register map, FIFO, baud
+
+### IBM PC/AT Technical Reference Manual
+
+- PIC remap, Port 0x61
+
+### OSDev Wiki
+
+https://wiki.osdev.org

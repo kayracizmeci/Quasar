@@ -39,6 +39,9 @@ override CC_IS_CLANG := $(shell ! $(CC) --version 2>/dev/null | grep -q '^Target
 ifeq ($(CC_IS_CLANG),1)
     override CC += \
         -target x86_64-unknown-none-elf
+    ifeq ($(TOOLCHAIN_PREFIX),)
+        override LD := x86_64-elf-ld
+    endif
 endif
 
 override CFLAGS += \
@@ -117,6 +120,40 @@ obj/%.asm.o: %.asm GNUmakefile
 	nasm $(NASMFLAGS) $< -o $@
 
 
+.PHONY: iso
+iso: bin/$(OUTPUT)
+	mkdir -p iso_root/boot/limine iso_root/EFI/BOOT
+	cp -f bin/$(OUTPUT)                          iso_root/boot/
+	cp -f limine.conf                            iso_root/boot/limine/
+	cp -f limine-binary/limine-bios.sys          iso_root/boot/limine/
+	cp -f limine-binary/limine-bios-cd.bin       iso_root/boot/limine/
+	cp -f limine-binary/limine-uefi-cd.bin       iso_root/boot/limine/
+	cp -f limine-binary/BOOTX64.EFI              iso_root/EFI/BOOT/
+	cp -f limine-binary/BOOTIA32.EFI             iso_root/EFI/BOOT/
+	xorriso -as mkisofs -R -r -J \
+	    -b boot/limine/limine-bios-cd.bin \
+	    -no-emul-boot -boot-load-size 4 -boot-info-table \
+	    -hfsplus -apm-block-size 2048 \
+	    --efi-boot boot/limine/limine-uefi-cd.bin \
+	    -efi-boot-part --efi-boot-image --protective-msdos-label \
+	    iso_root -o image.iso
+	./limine-binary/limine bios-install image.iso
+
+.PHONY: run
+run: iso
+	qemu-system-x86_64 -machine q35 -cdrom image.iso -m 256M \
+	    -serial stdio -no-reboot -no-shutdown
+
+.PHONY: run-kvm
+run-kvm: iso
+	qemu-system-x86_64 -machine q35 -cdrom image.iso -m 256M \
+	    -serial stdio -no-reboot -no-shutdown \
+	    -enable-kvm -cpu host
+
 .PHONY: clean
 clean:
 	rm -rf bin obj
+
+.PHONY: clean-iso
+clean-iso: clean
+	rm -rf iso_root image.iso

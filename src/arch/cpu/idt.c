@@ -1,9 +1,14 @@
 #include <stdint.h>
+#include <stddef.h>
 
-#include "exceptions.h"
+#include "arch/cpu/exceptions.h"
+#include "arch/cpu/idt.h"
 #include "drivers/serial.h"
 
 extern void idt_flush(uint64_t idtr_ptr);
+/* EOI (End Of Interrupt) must be sent after every real hardware IRQ; declared here to avoid
+   pulling the full APIC header into the generic interrupt dispatch path */
+extern void apic_eoi(void);
 
 extern void isr0(void);  extern void isr1(void);  extern void isr2(void);
 extern void isr3(void);  extern void isr4(void);  extern void isr5(void);
@@ -17,6 +22,16 @@ extern void isr24(void); extern void isr25(void); extern void isr26(void);
 extern void isr27(void); extern void isr28(void); extern void isr29(void);
 extern void isr30(void); extern void isr31(void);
 
+extern void irq32(void);  extern void irq33(void);  extern void irq34(void);
+extern void irq35(void);  extern void irq36(void);  extern void irq37(void);
+extern void irq38(void);  extern void irq39(void);  extern void irq40(void);
+extern void irq41(void);  extern void irq42(void);  extern void irq43(void);
+extern void irq44(void);  extern void irq45(void);  extern void irq46(void);
+extern void irq47(void);  extern void irq48(void);  extern void irq49(void);
+extern void irq50(void);  extern void irq51(void);  extern void irq52(void);
+extern void irq53(void);  extern void irq54(void);  extern void irq55(void);
+extern void irq255(void);
+
 struct InterruptGate64 {
     uint16_t offset_1;
     uint16_t selector;
@@ -26,14 +41,6 @@ struct InterruptGate64 {
     uint32_t offset_3;
     uint32_t reserved;
 } __attribute__((packed));
-
-struct InterruptFrame {
-    uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-    uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
-    uint64_t vector;
-    uint64_t error_code;
-    uint64_t rip, cs, rflags, rsp, ss;
-};
 
 static struct InterruptGate64 idt[IDT_NUM_ENTRIES];
 
@@ -174,6 +181,47 @@ void isr_handler(struct InterruptFrame *frame) {
     }
 }
 
+
+typedef void (*irq_handler_t)(struct InterruptFrame *);
+
+static irq_handler_t irq_handlers[IRQ_VECTOR_COUNT];
+
+void irq_register_handler(int vector, irq_handler_t handler) {
+    int slot = vector - IRQ_VECTOR_BASE;
+    if (slot >= 0 && slot < IRQ_VECTOR_COUNT) {
+        irq_handlers[slot] = handler;
+    }
+}
+
+/* Called from irq_common in idt.asm for every hardware interrupt */
+void irq_dispatch(struct InterruptFrame *frame) {
+    /* The APIC spurious vector fires when an IRQ is withdrawn between the
+       APIC asserting it and the CPU acknowledging it.  No EOI is needed or
+       permitted in that case — sending one would de-sync the APIC state. */
+    if (frame->vector == IRQ_VECTOR_SPURIOUS) {
+        return;
+    }
+
+    int slot = (int)frame->vector - IRQ_VECTOR_BASE;
+    if (slot >= 0 && slot < IRQ_VECTOR_COUNT && irq_handlers[slot] != NULL) {
+        irq_handlers[slot](frame);
+    }
+
+    /* EOI goes out after the handler returns so level-triggered devices see
+       the line de-asserted only once the kernel has finished servicing it */
+    apic_eoi();
+}
+
+
+static void (* const irq_stub_table[])(void) = {
+    irq32,  irq33,  irq34,  irq35,  irq36,  irq37,  irq38,  irq39,
+    irq40,  irq41,  irq42,  irq43,  irq44,  irq45,  irq46,  irq47,
+    irq48,  irq49,  irq50,  irq51,  irq52,  irq53,  irq54,  irq55,
+};
+
+/* Number of entries in irq_stub_table (24 stubs: vectors 32-55) */
+#define IRQ_STUB_COUNT  24
+
 void idt_init(void) {
     idtr.limit = (uint16_t)(sizeof(struct InterruptGate64) * IDT_NUM_ENTRIES - 1);
     idtr.base  = (uint64_t)&idt;
@@ -192,5 +240,20 @@ void idt_init(void) {
         idt_set_gate(i, (uint64_t)isr_table[i], gate_type, ist);
     }
 
+    /* Install hardware IRQ stubs.  IST 0 is correct here: if a hardware IRQ
+       arrives on a broken stack we have bigger problems than the stack itself. */
+    for (int i = 0; i < IRQ_STUB_COUNT; i++) {
+        int vector = IRQ_VECTOR_BASE + i;
+        idt_set_gate(vector, (uint64_t)irq_stub_table[i], IDT_GATE_INTERRUPT, 0);
+    }
+
+    /* Spurious vector must be registered so the CPU has a valid gate to jump
+       to if the APIC fires it; without this gate a double fault would occur */
+    idt_set_gate(IRQ_VECTOR_SPURIOUS, (uint64_t)irq255, IDT_GATE_INTERRUPT, 0);
+
+    idt_flush((uint64_t)&idtr);
+}
+
+void idt_load(void) {
     idt_flush((uint64_t)&idtr);
 }

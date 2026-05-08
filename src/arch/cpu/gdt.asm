@@ -3,6 +3,8 @@ bits 64
 section .note.GNU-stack noalloc noexec nowrite progbits
 
 global gdt_load
+global gdt_load_ap
+global tss_descs
 
 section .bss
 
@@ -34,9 +36,8 @@ gdt:
     dq 0x00AFFA000000FFFF           ; index 4 (0x20) — 64-bit ring-3 code:  P=1 DPL=3 L=1 G=1
 
 align 16
-tss_desc:
-    dq 0
-    dq 0
+tss_descs:
+    times 128 dq 0     ; 64 TSS descriptors × 16 bytes each; CPU n uses selector 0x30 + n*0x10
 
 gdt_end:
 
@@ -61,7 +62,7 @@ gdt_load:
     rep stosq
 
     lea rdi, [rel tss]
-    lea rsi, [rel tss_desc]
+    lea rsi, [rel tss_descs]
     mov rcx, rdi
 
     mov word [rsi + 0], 103         ; TSS limit = 104 - 1 (limit is inclusive)
@@ -106,5 +107,28 @@ gdt_load:
     mov ax, 0x30                    ; GDT index 6 — TSS selector (tss_desc at offset 0x30 after alignment)
     ltr ax
 
+    ret
+
+; GDT reload for application processors.  The GDT itself was
+; already built by the BSP's gdt_load(); APs just need to switch their
+; segment registers to our descriptors.  TSS loading is intentionally skipped
+; until each AP has its own TSS with a valid IST stack.
+gdt_load_ap:
+    lea rax, [rel gdtr]
+    lgdt [rax]
+
+    push qword 0x08              ; kernel code selector — needed for far return
+    lea rax, [rel .ap_cs_flush]
+    push rax
+    retfq
+
+.ap_cs_flush:
+    mov ax, 0x10                 ; kernel data selector
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    xor ax, ax                   ; null FS/GS — GS base is set later via MSR
+    mov fs, ax
+    mov gs, ax
     ret
 [WARNING +reloc-rel-dword]

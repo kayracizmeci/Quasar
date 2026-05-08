@@ -3,6 +3,7 @@
 #include "vmm.h"
 #include "drivers/serial.h"
 #include "kernel/panic.h"
+#include "kernel/spinlock.h"
 
 #include <stdint.h>
 
@@ -19,6 +20,7 @@ struct block {
 #define HEADER_SIZE  sizeof(struct block)
 
 static struct block *heap_start;
+static spinlock_t   heap_lock = SPINLOCK_INIT;
 
 void kheap_init(void) {
     for (size_t i = 0; i < HEAP_PAGES; i++) {
@@ -40,6 +42,7 @@ void kheap_init(void) {
 
 void *kmalloc(size_t size) {
     if (!size) return NULL;
+    spinlock_acquire(&heap_lock);
     struct block *cur = heap_start;
     while (cur) {
         if (cur->free && cur->size >= size) {
@@ -52,18 +55,23 @@ void *kmalloc(size_t size) {
                 cur->next   = split;
             }
             cur->free = 0;
+            spinlock_release(&heap_lock);
             return (void *)(cur + 1);
         }
         cur = cur->next;
     }
+    spinlock_release(&heap_lock);
     return NULL;
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
     struct block *blk = (struct block *)ptr - 1;
-    if (blk->free)
+    spinlock_acquire(&heap_lock);
+    if (blk->free) {
+        spinlock_release(&heap_lock);
         kpanic("kfree double free");
+    }
     blk->free = 1;
 
     /* Forward coalescing */
@@ -82,4 +90,5 @@ void kfree(void *ptr) {
             prev->next  = blk->next;
         }
     }
+    spinlock_release(&heap_lock);
 }
